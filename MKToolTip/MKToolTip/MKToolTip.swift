@@ -447,20 +447,6 @@ open class MKToolTip: UIView {
             let radius = refViewFrame.center.farCornerDistance()
             let frame = view.bounds
             let layer = RadialGradientBackgroundLayer(frame: frame, center: refViewFrame.center, radius: radius, locations: preferences.drawing.background.gradientLocations, colors: preferences.drawing.background.gradientColors)
-            let refViewFrame = presentingView.convert(presentingView.bounds, to: UIApplication.shared.keyWindow)
-            let landscapeBounds = UIScreen.main.bounds
-            let radius = min(landscapeBounds.width, landscapeBounds.height) / 2.0
-            let frame = CGRect(x: 0, y: 0, width: landscapeBounds.width, height: landscapeBounds.height)
-            let center = CGPoint(x: landscapeBounds.midX, y: landscapeBounds.midY)
-            
-            let layer = RadialGradientBackgroundLayer(frame: frame, center: center, radius: radius, locations: preferences.drawing.background.gradientLocations, colors: preferences.drawing.background.gradientColors)
-            
-            view.layer.sublayers?.forEach { sublayer in
-                if sublayer is RadialGradientBackgroundLayer {
-                    sublayer.removeFromSuperlayer()
-                }
-            }
-            
             view.layer.insertSublayer(layer, at: 0)
         }
     }
