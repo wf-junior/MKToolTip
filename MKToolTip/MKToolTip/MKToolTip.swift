@@ -32,42 +32,50 @@ import UIKit
 
 public extension UIView {
 
-    @objc public func showToolTip(identifier: String, title: String? = nil, message: String, button: String? = nil, arrowPosition: MKToolTip.ArrowPosition, preferences: ToolTipPreferences = ToolTipPreferences(), delegate: MKToolTipDelegate? = nil) {
+    @objc public func showToolTip(identifier: String, title: String? = nil, message: String, button: String? = nil, arrowPosition: MKToolTip.ArrowPosition, preferences: ToolTipPreferences = ToolTipPreferences(), delegate: MKToolTipDelegate? = nil) -> MKToolTip {
         let tooltip = MKToolTip(view: self, identifier: identifier, title: title, message: message, button: button, arrowPosition: arrowPosition, preferences: preferences, delegate: delegate)
         tooltip.calculateFrame()
         tooltip.show()
+        return tooltip
     }
-    
 }
 
 public extension UIBarItem {
-    
+
     @objc public func showToolTip(identifier: String, title: String? = nil, message: String, button: String? = nil, arrowPosition: MKToolTip.ArrowPosition, preferences: ToolTipPreferences = ToolTipPreferences(), delegate: MKToolTipDelegate? = nil) {
         if let view = self.view {
             view.showToolTip(identifier: identifier, title: title, message: message, button: button, arrowPosition: arrowPosition, preferences: preferences, delegate: delegate)
         }
     }
-    
+
+}
+
+public extension UIBarButtonItem {
+    @objc public override func showToolTip(identifier: String, title: String? = nil, message: String, button: String? = nil, arrowPosition: MKToolTip.ArrowPosition, preferences: ToolTipPreferences = ToolTipPreferences(), delegate: MKToolTipDelegate? = nil) {
+        if let view = self.view {
+            view.showToolTip(identifier: identifier, title: title, message: message, button: button, arrowPosition: arrowPosition, preferences: preferences, delegate: delegate)
+        }
+    }
 }
 
 // MARK: Preferences
 
 @objc public class ToolTipPreferences: NSObject {
-    
+
     @objc public class Drawing: NSObject {
-        
+
         @objc public class Arrow: NSObject {
             @objc fileprivate var tip: CGPoint = .zero
             @objc public var size: CGSize = CGSize(width: 20, height: 10)
             @objc public var tipCornerRadius: CGFloat = 5
         }
-        
+
         @objc public class Bubble: NSObject {
             @objc public class Border: NSObject {
                 @objc public var color: UIColor? = nil
                 @objc public var width: CGFloat = 1
             }
-            
+
             @objc public var inset: CGFloat = 15
             @objc public var spacing: CGFloat = 5
             @objc public var cornerRadius: CGFloat = 5
@@ -82,22 +90,22 @@ public extension UIBarItem {
             @objc public var gradientColors: [UIColor] = [UIColor(red: 0.761, green: 0.914, blue: 0.984, alpha: 1.000), UIColor(red: 0.631, green: 0.769, blue: 0.992, alpha: 1.000)]
             @objc public var border: Border = Border()
         }
-        
+
         @objc public class Title: NSObject {
             @objc public var font: UIFont = UIFont.systemFont(ofSize: 12, weight: .bold)
             @objc public var color: UIColor = .white
         }
-        
+
         @objc public class Message: NSObject {
             @objc public var font: UIFont = UIFont.systemFont(ofSize: 12, weight: .regular)
             @objc public var color: UIColor = .white
         }
-        
+
         @objc public class Button: NSObject {
             @objc public var font: UIFont = UIFont.systemFont(ofSize: 12, weight: .regular)
             @objc public var color: UIColor = .white
         }
-        
+
         @objc public class Background: NSObject {
             @objc public var color: UIColor = UIColor.clear {
                 didSet {
@@ -107,15 +115,16 @@ public extension UIBarItem {
             @objc fileprivate var gradientLocations: [CGFloat] = [0.05, 1.0]
             @objc fileprivate var gradientColors: [UIColor] = [UIColor.clear, UIColor.black.withAlphaComponent(0.4)]
         }
-        
+
         @objc public var arrow: Arrow = Arrow()
         @objc public var bubble: Bubble = Bubble()
         @objc public var title: Title = Title()
         @objc public var message: Message = Message()
         @objc public var button: Button = Button()
         @objc public var background: Background = Background()
+        @objc public var customView: UIView?
     }
-    
+
     @objc public class Animating: NSObject {
         @objc public var dismissTransform: CGAffineTransform = CGAffineTransform(scaleX: 0.1, y: 0.1)
         @objc public var showInitialTransform: CGAffineTransform = CGAffineTransform(scaleX: 0, y: 0)
@@ -127,69 +136,69 @@ public extension UIBarItem {
         @objc public var showDuration: TimeInterval = 0.7
         @objc public var dismissDuration: TimeInterval = 0.7
     }
-    
+
     @objc public var drawing: Drawing = Drawing()
     @objc public var animating: Animating = Animating()
-    
+
     @objc public override init() {}
-    
+
 }
 
 // MARK: MKToolTip class implementation
 
 open class MKToolTip: UIView {
-    
+
     @objc public enum ArrowPosition: Int {
         case top
         case right
         case bottom
         case left
     }
-    
+
     // MARK: Variables
-    
+
     private var arrowPosition: ArrowPosition = .top
     private var bubbleFrame: CGRect = .zero
-    
+
     private var containerWindow: UIWindow?
     private unowned var presentingView: UIView
-    
+
     private var identifier: String
     private var title: String?
     private var message: String
     private var button: String?
-    
+
     private weak var delegate: MKToolTipDelegate?
-    
+
     private var viewDidAppearDate: Date = Date()
-    
+
     private var preferences: ToolTipPreferences
-    
+
     // MARK: Lazy variables
-    
+
     private lazy var gradient: CGGradient = { [unowned self] in
         let colors = self.preferences.drawing.bubble.gradientColors.map { $0.cgColor } as CFArray
         let locations = self.preferences.drawing.bubble.gradientLocations
         return CGGradient(colorsSpace: nil, colors: colors, locations: locations)!
         }()
-    
+
     private lazy var titleSize: CGSize = { [unowned self] in
         var attributes = [NSAttributedString.Key.font : self.preferences.drawing.title.font]
-        
+
         var textSize = CGSize.zero
         if self.title != nil {
             textSize = self.title!.boundingRect(with: CGSize(width: self.preferences.drawing.bubble.maxWidth - self.preferences.drawing.bubble.inset * 2, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
         }
-        
+
         textSize.width = ceil(textSize.width)
         textSize.height = ceil(textSize.height)
-        
+
         return textSize
         }()
-    
+
     private lazy var messageSize: CGSize = { [unowned self] in
         var attributes = [NSAttributedString.Key.font : self.preferences.drawing.message.font]
-        
+
         var textSize = self.message.boundingRect(with: CGSize(width: self.preferences.drawing.bubble.maxWidth - self.preferences.drawing.bubble.inset * 2, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
         
         textSize.width = ceil(textSize.width)
@@ -213,24 +222,28 @@ open class MKToolTip: UIView {
         }()
     
     private lazy var bubbleSize: CGSize = { [unowned self] in
-        var height = self.preferences.drawing.bubble.inset
-        
-        if self.title != nil {
-            height += self.titleSize.height + self.preferences.drawing.bubble.spacing
+        if let customView = self.preferences.drawing.customView {
+            return CGSize(width: customView.frame.width + preferences.drawing.bubble.inset * 2, height: customView.frame.height + preferences.drawing.bubble.inset * 2)
+        } else {
+            var height = self.preferences.drawing.bubble.inset
+
+            if self.title != nil {
+                height += self.titleSize.height + self.preferences.drawing.bubble.spacing
+            }
+
+            height += self.messageSize.height
+
+            if self.button != nil {
+                height += self.preferences.drawing.bubble.spacing + self.buttonSize.height
+            }
+
+            height += self.preferences.drawing.bubble.inset
+
+            let widthInset = self.preferences.drawing.bubble.inset * 2
+            let width = min(self.preferences.drawing.bubble.maxWidth, max(self.titleSize.width + widthInset, self.messageSize.width + widthInset))
+            return CGSize(width: width, height: height)
         }
-        
-        height += self.messageSize.height
-        
-        if self.button != nil {
-            height += self.preferences.drawing.bubble.spacing + self.buttonSize.height
-        }
-        
-        height += self.preferences.drawing.bubble.inset
-        
-        let widthInset = self.preferences.drawing.bubble.inset * 2
-        let width = min(self.preferences.drawing.bubble.maxWidth, max(self.titleSize.width + widthInset, self.messageSize.width + widthInset))
-        return CGSize(width: width, height: height)
-        }()
+    }()
     
     private lazy var contentSize: CGSize = { [unowned self] in
         var height: CGFloat = 0
@@ -261,6 +274,10 @@ open class MKToolTip: UIView {
         self.delegate = delegate
         super.init(frame: .zero)
         self.backgroundColor = .clear
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     @available(*, unavailable)
@@ -348,6 +365,7 @@ open class MKToolTip: UIView {
         createWindow(with: viewController)
         addTapGesture(for: viewController)
         showWithAnimation()
+        addCustomViewIfNeeded()
     }
     
     private func createWindow(with viewController: UIViewController) {
@@ -375,7 +393,7 @@ open class MKToolTip: UIView {
         })
     }
     
-    private func dismissWithAnimation() {
+    public func dismissWithAnimation() {
         UIView.animate(withDuration: preferences.animating.dismissDuration, delay: 0, usingSpringWithDamping: preferences.animating.springDamping, initialSpringVelocity: preferences.animating.springVelocity, options: [.curveEaseInOut], animations: {
             self.transform = self.preferences.animating.dismissTransform
             self.alpha = self.preferences.animating.dismissFinalAlpha
@@ -395,30 +413,58 @@ open class MKToolTip: UIView {
         drawBubble(context)
         drawTexts(to: context)
     }
-    
+
+    override open func layoutSubviews() {
+        super.layoutSubviews()
+        calculateFrame()
+        setNeedsDisplay()
+    }
+
     private func viewDidAppear() {
         self.viewDidAppearDate = Date()
         self.delegate?.toolTipViewDidAppear(for: self.identifier)
     }
-    
+
     private func viewDidDisappear() {
         let viewDidDisappearDate = Date()
         let timeInterval = viewDidDisappearDate.timeIntervalSince(self.viewDidAppearDate)
         self.delegate?.toolTipViewDidDisappear(for: self.identifier, with: timeInterval)
     }
-    
+
+    private func subscribeToDeviceOrientationChanges() {
+        NotificationCenter.default.addObserver(self, selector: #selector(deviceOrientationDidChange), name: UIDevice.orientationDidChangeNotification, object: nil)
+    }
+
+    @objc private func deviceOrientationDidChange() {
+        layoutSubviews()
+    }
+
     // MARK: Drawing methods
-    
+
     private func drawBackgroundLayer() {
         if let view = self.containerWindow?.rootViewController?.view {
             let refViewFrame = presentingView.convert(presentingView.bounds, to: UIApplication.shared.keyWindow);
             let radius = refViewFrame.center.farCornerDistance()
             let frame = view.bounds
             let layer = RadialGradientBackgroundLayer(frame: frame, center: refViewFrame.center, radius: radius, locations: preferences.drawing.background.gradientLocations, colors: preferences.drawing.background.gradientColors)
+            let refViewFrame = presentingView.convert(presentingView.bounds, to: UIApplication.shared.keyWindow)
+            let landscapeBounds = UIScreen.main.bounds
+            let radius = min(landscapeBounds.width, landscapeBounds.height) / 2.0
+            let frame = CGRect(x: 0, y: 0, width: landscapeBounds.width, height: landscapeBounds.height)
+            let center = CGPoint(x: landscapeBounds.midX, y: landscapeBounds.midY)
+            
+            let layer = RadialGradientBackgroundLayer(frame: frame, center: center, radius: radius, locations: preferences.drawing.background.gradientLocations, colors: preferences.drawing.background.gradientColors)
+            
+            view.layer.sublayers?.forEach { sublayer in
+                if sublayer is RadialGradientBackgroundLayer {
+                    sublayer.removeFromSuperlayer()
+                }
+            }
+            
             view.layer.insertSublayer(layer, at: 0)
         }
     }
-    
+
     private func drawBubbleBorder(_ context: CGContext, path: CGMutablePath, borderColor: UIColor) {
         context.saveGState()
         context.addPath(path)
@@ -427,11 +473,11 @@ open class MKToolTip: UIView {
         context.strokePath()
         context.restoreGState()
     }
-    
+
     private func drawBubble(_ context: CGContext) {
         context.saveGState()
         let path = CGMutablePath()
-        
+
         switch arrowPosition {
         case .top:
             let startingPoint = CGPoint(x: preferences.drawing.arrow.tip.x - preferences.drawing.arrow.size.width / 2, y: bubbleFrame.y)
@@ -470,67 +516,80 @@ open class MKToolTip: UIView {
             path.addLine(to: CGPoint(x: preferences.drawing.arrow.tip.x + preferences.drawing.arrow.size.height, y: preferences.drawing.arrow.tip.y - preferences.drawing.arrow.size.width / 2))
             addArrowTipArc(with: startingPoint, to: path)
         }
-        
+
         path.closeSubpath()
-        
+
         context.addPath(path)
         context.clip()
         context.fillPath()
         context.drawLinearGradient(gradient, start: CGPoint.zero, end: CGPoint(x: 0, y: frame.height), options: [])
         context.restoreGState()
-        
+
         if let borderColor = preferences.drawing.bubble.border.color {
             drawBubbleBorder(context, path: path, borderColor: borderColor)
         }
     }
-    
+
     private func addTopArc(to path: CGMutablePath) {
         path.addArc(tangent1End: CGPoint(x: bubbleFrame.x, y:  bubbleFrame.y), tangent2End: CGPoint(x: bubbleFrame.x, y: bubbleFrame.y + bubbleFrame.height), radius: preferences.drawing.bubble.cornerRadius)
     }
-    
+
     private func addRightArc(to path: CGMutablePath) {
         path.addArc(tangent1End: CGPoint(x: bubbleFrame.x + bubbleFrame.width, y: bubbleFrame.y), tangent2End: CGPoint(x: bubbleFrame.x, y: bubbleFrame.y), radius: preferences.drawing.bubble.cornerRadius)
     }
-    
+
     private func addBottomArc(to path: CGMutablePath) {
         path.addArc(tangent1End: CGPoint(x: bubbleFrame.x + bubbleFrame.width, y: bubbleFrame.y + bubbleFrame.height), tangent2End: CGPoint(x: bubbleFrame.x + bubbleFrame.width, y: bubbleFrame.y), radius: preferences.drawing.bubble.cornerRadius)
     }
-    
+
     private func addLeftArc(to path: CGMutablePath) {
         path.addArc(tangent1End: CGPoint(x: bubbleFrame.x, y: bubbleFrame.y + bubbleFrame.height), tangent2End: CGPoint(x: bubbleFrame.x + bubbleFrame.width, y: bubbleFrame.y + bubbleFrame.height), radius: preferences.drawing.bubble.cornerRadius)
     }
-    
+
     private func addArrowTipArc(with startingPoint: CGPoint, to path: CGMutablePath) {
         path.addArc(tangent1End: preferences.drawing.arrow.tip, tangent2End: startingPoint, radius: preferences.drawing.arrow.tipCornerRadius)
     }
-    
+
     private func drawTexts(to context: CGContext) {
         context.saveGState()
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .left
         paragraphStyle.lineBreakMode = NSLineBreakMode.byWordWrapping
-        
+
         let xOrigin = bubbleFrame.x + preferences.drawing.bubble.inset
         var yOrigin = bubbleFrame.y + preferences.drawing.bubble.inset
-        
+
         if title != nil {
             let titleRect = CGRect(x: xOrigin, y: yOrigin, width: titleSize.width, height: titleSize.height)
             title!.draw(in: titleRect, withAttributes: [NSAttributedString.Key.font : preferences.drawing.title.font, NSAttributedString.Key.foregroundColor : preferences.drawing.title.color, NSAttributedString.Key.paragraphStyle : paragraphStyle])
-            
+
             yOrigin = titleRect.y + titleRect.height + preferences.drawing.bubble.spacing
         }
-        
+
         let messageRect = CGRect(x: xOrigin, y: yOrigin, width: messageSize.width, height: messageSize.height)
         message.draw(in: messageRect, withAttributes: [NSAttributedString.Key.font : preferences.drawing.message.font, NSAttributedString.Key.foregroundColor : preferences.drawing.message.color, NSAttributedString.Key.paragraphStyle : paragraphStyle])
-        
+
         if button != nil {
             yOrigin += messageRect.height + preferences.drawing.bubble.spacing
-            
+
             let buttonRect = CGRect(x: xOrigin, y: yOrigin, width: buttonSize.width, height: buttonSize.height)
             button!.draw(in: buttonRect, withAttributes: [NSAttributedString.Key.font : preferences.drawing.button.font, NSAttributedString.Key.foregroundColor : preferences.drawing.button.color, NSAttributedString.Key.paragraphStyle : paragraphStyle])
         }
-        
     }
+
+    private func addCustomViewIfNeeded() {
+        guard let customView = preferences.drawing.customView else { return }
+
+        customView.frame = CGRect(
+            x: preferences.drawing.bubble.inset,
+            y: preferences.drawing.bubble.inset,
+            width: customView.frame.width,
+            height: customView.frame.height
+        )
+
+        addSubview(customView)
+    }
+
 }
 
 // MARK: RadialGradientBackgroundLayer
@@ -571,4 +630,3 @@ private class RadialGradientBackgroundLayer: CALayer {
         ctx.restoreGState()
     }
 }
-
